@@ -11,7 +11,6 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm install --only=production
 COPY --from=builder /app/dist ./dist
-COPY gcp-key.json ./gcp-key.json
 
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
