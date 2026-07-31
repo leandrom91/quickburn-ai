@@ -24,7 +24,7 @@ export class TelegramService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    const token = this.configService.get<string>('telegram.botToken');
+    const token = this.configService.get<string>('telegram.botToken') || process.env.TELEGRAM_BOT_TOKEN;
 
     if (!token || token.trim() === '' || token === 'tu_telegram_bot_token_aqui') {
       this.logger.warn(
@@ -37,9 +37,15 @@ export class TelegramService implements OnModuleInit {
       this.bot = new Telegraf(token);
       this.setupHandlers();
 
-      const isWebhook = this.configService.get<string>('TELEGRAM_MODE') === 'webhook';
+      const isWebhook =
+        this.configService.get<string>('TELEGRAM_MODE') === 'webhook' ||
+        process.env.TELEGRAM_MODE === 'webhook' ||
+        process.env.NODE_ENV === 'production';
+
       if (!isWebhook) {
-        this.bot.launch();
+        this.bot.launch().catch((err) => {
+          this.logger.error(`Error no crítico en polling de Telegram: ${err.message}`);
+        });
         this.logger.log('Bot de Telegram iniciado en modo Polling (Desarrollo Local).');
       } else {
         this.logger.log('Bot de Telegram listo en modo Webhook Serverless (Cloud Run).');
@@ -91,7 +97,7 @@ export class TelegramService implements OnModuleInit {
         },
         schedule: {
           preferred_days: ['Monday', 'Wednesday', 'Friday'],
-          next_workout: new Date().toISOString(),
+          next_workout: this.firestoreService.formatHumanTimestamp(),
           weekly_streak: 0,
         },
       };
@@ -128,6 +134,12 @@ export class TelegramService implements OnModuleInit {
       const profile = await this.firestoreService.getUserProfile(userId);
       if (profile) {
         profile.profile.max_weekly_frequency = freq;
+        profile.schedule.preferred_days =
+          freq === 2
+            ? ['Tuesday', 'Thursday']
+            : freq === 3
+            ? ['Monday', 'Wednesday', 'Friday']
+            : ['Monday', 'Tuesday', 'Thursday', 'Friday'];
         profile.onboarding_step = 'BIOMETRICS';
         await this.firestoreService.saveUserProfile(profile);
       }
@@ -350,13 +362,17 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
       return;
     }
 
-    const reminderHeader =
-      `¡Me encanta tu entusiasmo por entrenar, *${firstName}*! 🚀💪\n\n` +
-      `Sin embargo, aún no podemos avanzar a la rutina. Para cuidar tu salud deportiva y adaptar cada sesión a tu nivel exacto, necesitamos completar primero tu configuración inicial.\n\n` +
-      `¡Falta muy poco! Por favor responde:`;
-
+    // Interceptor humanizado y empático sin repetir el banner de bienvenida completo
     if (step === 'FITNESS_LEVEL') {
-      await this.promptFitnessLevelStep(ctx, firstName);
+      await this.sendSafeMarkdownReply(
+        ctx,
+        `¡Hola, *${firstName}*! 🚀 Me alegra saludarte. Para poder darte la mejor recomendación personalizada y cuidar tu salud deportiva, por favor selecciona primero tu nivel en las opciones arriba:`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🟢 Principiante (Sin experiencia previa)', 'OB_FITNESS_beginner')],
+          [Markup.button.callback('🟡 Intermedio (Entreno ocasionalmente)', 'OB_FITNESS_intermediate')],
+          [Markup.button.callback('🔴 Avanzado (Atleta constante)', 'OB_FITNESS_advanced')],
+        ])
+      );
     } else if (step === 'WEEKLY_FREQUENCY') {
       await this.promptWeeklyFrequencyStep(ctx, profile?.profile.fitness_level || 'intermediate');
     } else if (step === 'BIOMETRICS') {
@@ -434,7 +450,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
       `¿Qué deseas hacer hoy? Usa los botones o escríbeme libremente:`;
 
     await this.sendSafeMarkdownReply(ctx, text, Markup.inlineKeyboard([
-      [Markup.button.callback('🏋️ Generar Rutina HIIT', 'CMD_WORKOUT')],
+      [Markup.button.callback('🏋️ Generar Rutina HIIT (15 min)', 'CMD_WORKOUT')],
       [Markup.button.callback('📅 Reprogramar Entrenamiento', 'CMD_SCHEDULE')],
       [Markup.button.callback('📊 Reportar Esfuerzo RPE', 'CMD_RPE')],
     ]));
