@@ -44,13 +44,17 @@ export class FirestoreService implements OnModuleInit {
   private initFirestore(): boolean {
     if (this.firestore) return true;
 
-    const projectId = this.configService.get<string>('firestore.projectId');
+    const projectId = this.configService.get<string>('firestore.projectId') || 'quickburnai';
     const keyFilename = this.configService.get<string>('firestore.keyFilename');
 
     try {
       if (keyFilename && fs.existsSync(keyFilename)) {
         this.firestore = new Firestore({ projectId, keyFilename });
-        this.logger.log(`Conectado a Firestore GCP (Project: ${projectId})`);
+        this.logger.log(`Conectado a Firestore GCP con Service Account JSON (${keyFilename}) (Project: ${projectId})`);
+        return true;
+      } else {
+        this.firestore = new Firestore({ projectId });
+        this.logger.log(`Conectado a Firestore GCP vía ADC nativo Cloud Run (Project: ${projectId})`);
         return true;
       }
     } catch (error) {
@@ -96,13 +100,17 @@ export class FirestoreService implements OnModuleInit {
               preferred_days: data.schedule?.preferred_days || ['Monday', 'Wednesday', 'Friday'],
               next_workout: data.schedule?.next_workout || new Date().toISOString(),
               weekly_streak: data.schedule?.weekly_streak || 0,
+              last_completed_workout: data.schedule?.last_completed_workout,
+              load_adjustment_factor: data.schedule?.load_adjustment_factor || 1.0,
             },
+            created_at: data.created_at || new Date().toISOString(),
           };
         }
       } catch (err) {
-        this.logger.warn(`Error de lectura en Firestore: ${err.message}`);
+        this.logger.warn(`Error al consultar perfil en Firestore (UserId: ${userId}): ${err.message}`);
       }
     }
+
     return this.memoryStore.get(`user_${userId}`) || null;
   }
 
@@ -114,15 +122,15 @@ export class FirestoreService implements OnModuleInit {
       try {
         await this.firestore.collection('users').doc(profile.user_id).set(profile, { merge: true });
         this.logger.log(`Perfil de usuario ${profile.user_id} guardado exitosamente en Firestore.`);
-        return;
       } catch (err) {
-        this.logger.warn(`Error de guardado en Firestore: ${err.message}`);
+        this.logger.warn(`Error guardando perfil en Firestore (UserId: ${profile.user_id}): ${err.message}`);
       }
     }
   }
 
   async getSessionHistory(userId: string): Promise<any[]> {
     this.initFirestore();
+
     if (this.firestore) {
       try {
         const doc = await this.firestore
@@ -136,9 +144,10 @@ export class FirestoreService implements OnModuleInit {
           return doc.data()?.messages || [];
         }
       } catch (err) {
-        this.logger.warn(`Error leyendo sesión en Firestore: ${err.message}`);
+        this.logger.warn(`Error al consultar historial de sesión en Firestore (${userId}): ${err.message}`);
       }
     }
+
     return this.memoryStore.get(`session_${userId}`) || [];
   }
 
@@ -153,10 +162,9 @@ export class FirestoreService implements OnModuleInit {
           .doc(userId)
           .collection('sessions')
           .doc('active')
-          .set({ updated_at: new Date().toISOString(), messages });
-        return;
+          .set({ messages, updated_at: new Date().toISOString() });
       } catch (err) {
-        this.logger.warn(`Error guardando sesión en Firestore: ${err.message}`);
+        this.logger.warn(`Error al guardar sesión en Firestore (${userId}): ${err.message}`);
       }
     }
   }
@@ -173,24 +181,15 @@ export class FirestoreService implements OnModuleInit {
           .collection('sessions')
           .doc('active')
           .delete();
-        return;
       } catch (err) {
-        this.logger.warn(`Error eliminando sesión en Firestore: ${err.message}`);
+        this.logger.warn(`Error al limpiar sesión en Firestore (${userId}): ${err.message}`);
       }
     }
   }
 
-  async saveRoutine(userId: string, routineJson: any): Promise<void> {
+  async saveRoutine(userId: string, routineData: any): Promise<string> {
     this.initFirestore();
-
-    const routineData = {
-      created_at: new Date().toISOString(),
-      ...routineJson,
-    };
-
-    const routines = this.memoryStore.get(`routines_${userId}`) || [];
-    routines.push(routineData);
-    this.memoryStore.set(`routines_${userId}`, routines);
+    const routineId = `routine_${Date.now()}`;
 
     if (this.firestore) {
       try {
@@ -198,39 +197,20 @@ export class FirestoreService implements OnModuleInit {
           .collection('users')
           .doc(userId)
           .collection('routines')
-          .add(routineData);
-        return;
+          .doc(routineId)
+          .set({
+            routine_id: routineId,
+            user_id: userId,
+            created_at: new Date().toISOString(),
+            ...routineData,
+          });
+        this.logger.log(`Rutina ${routineId} guardada para usuario ${userId} en Firestore.`);
       } catch (err) {
         this.logger.warn(`Error guardando rutina en Firestore: ${err.message}`);
       }
     }
-  }
 
-  async logSessionCompletion(userId: string, durationMin: number, rpeScore: number): Promise<void> {
-    this.initFirestore();
-
-    const logData = {
-      completed_at: new Date().toISOString(),
-      duration_minutes: durationMin,
-      rpe_score: rpeScore,
-    };
-
-    const history = this.memoryStore.get(`history_${userId}`) || [];
-    history.push(logData);
-    this.memoryStore.set(`history_${userId}`, history);
-
-    if (this.firestore) {
-      try {
-        await this.firestore
-          .collection('users')
-          .doc(userId)
-          .collection('workout_history')
-          .add(logData);
-        return;
-      } catch (err) {
-        this.logger.warn(`Error registrando sesión en Firestore: ${err.message}`);
-      }
-    }
+    return routineId;
   }
 
   async getWorkoutHistory(userId: string, limitCount = 5): Promise<any[]> {
@@ -242,16 +222,50 @@ export class FirestoreService implements OnModuleInit {
           .collection('users')
           .doc(userId)
           .collection('workout_history')
-          .orderBy('completed_at', 'desc')
+          .orderBy('timestamp', 'desc')
           .limit(limitCount)
           .get();
 
         return snapshot.docs.map((doc) => doc.data());
       } catch (err) {
-        this.logger.warn(`Error consultando historial en Firestore: ${err.message}`);
+        this.logger.warn(`Error al consultar historial de entrenamientos en Firestore (${userId}): ${err.message}`);
       }
     }
-    const history = this.memoryStore.get(`history_${userId}`) || [];
-    return history.slice(-limitCount);
+
+    return this.memoryStore.get(`history_${userId}`) || [];
+  }
+
+  async logSessionCompletion(userId: string, durationMin: number, rpeScore: number): Promise<string> {
+    return this.logWorkoutSession(userId, { duration_min: durationMin, rpe_score: rpeScore });
+  }
+
+  async logWorkoutSession(userId: string, sessionData: any): Promise<string> {
+    this.initFirestore();
+    const sessionId = `session_log_${Date.now()}`;
+
+    if (this.firestore) {
+      try {
+        await this.firestore
+          .collection('users')
+          .doc(userId)
+          .collection('workout_history')
+          .doc(sessionId)
+          .set({
+            session_log_id: sessionId,
+            user_id: userId,
+            timestamp: new Date().toISOString(),
+            ...sessionData,
+          });
+        this.logger.log(`Sesión de entrenamiento ${sessionId} registrada en Firestore para ${userId}.`);
+      } catch (err) {
+        this.logger.warn(`Error guardando sesión de entrenamiento en Firestore: ${err.message}`);
+      }
+    }
+
+    const currentHistory = this.memoryStore.get(`history_${userId}`) || [];
+    currentHistory.unshift({ session_log_id: sessionId, user_id: userId, timestamp: new Date().toISOString(), ...sessionData });
+    this.memoryStore.set(`history_${userId}`, currentHistory);
+
+    return sessionId;
   }
 }
