@@ -20,8 +20,6 @@ steps:
       - 'us-central1'
       - '--platform'
       - 'managed'
-      - '--port'
-      - '3000'
       - '--update-env-vars'
       - 'TELEGRAM_MODE=webhook,NODE_ENV=production,GCP_PROJECT_ID=quickburnai,GCP_LOCATION=us-central1'
       - '--allow-unauthenticated'

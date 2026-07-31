@@ -6,7 +6,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
   await app.listen(port, '0.0.0.0');
 
   logger.log(`🚀 QuickBurn AI Server running on http://0.0.0.0:${port}`);
