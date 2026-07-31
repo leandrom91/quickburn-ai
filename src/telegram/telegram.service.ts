@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Telegraf, Markup } from 'telegraf';
 import { OrchestratorAgent } from '../agents/orchestrator.agent';
+import { CoachFollowupAgent } from '../agents/coach-followup.agent';
 import { PromptSafetyGuardrails } from '../guardrails/prompt-safety.guardrails';
 import { AdkSessionService } from '../agents/adk-session.service';
 import { FirestoreService, UserProfile } from '../firestore/firestore.service';
@@ -15,6 +16,7 @@ export class TelegramService implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly orchestratorAgent: OrchestratorAgent,
+    private readonly coachFollowupAgent: CoachFollowupAgent,
     private readonly promptSafetyGuardrails: PromptSafetyGuardrails,
     private readonly adkSessionService: AdkSessionService,
     private readonly firestoreService: FirestoreService,
@@ -438,12 +440,20 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
     ]));
   }
 
-  async sendProactiveNotification(userId: string, message: string) {
-    if (this.bot) {
+  async sendProactiveNotification(userId?: string, customMessage?: string) {
+    const targetUserId = userId || '8617820808';
+    let messageToSend = customMessage;
+
+    if (!messageToSend) {
+      messageToSend = await this.coachFollowupAgent.processFollowup(targetUserId);
+    }
+
+    if (this.bot && messageToSend) {
       try {
-        await this.bot.telegram.sendMessage(userId, message, { parse_mode: 'Markdown' });
+        await this.bot.telegram.sendMessage(targetUserId, messageToSend, { parse_mode: 'Markdown' });
+        this.logger.log(`Notificación proactiva enviada a ${targetUserId}.`);
       } catch (err) {
-        this.logger.error(`Error enviando notificación proactiva a ${userId}: ${err.message}`);
+        this.logger.error(`Error enviando notificación proactiva a ${targetUserId}: ${err.message}`);
       }
     }
   }

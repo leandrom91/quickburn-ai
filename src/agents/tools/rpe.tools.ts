@@ -30,6 +30,13 @@ export class RpeTools {
       recomendacion = 'Sesión ligera (RPE <= 5). Incrementando nivel de reto para la próxima sesión.';
     }
 
+    const profile = await this.firestoreService.getUserProfile(userId);
+    if (profile) {
+      profile.schedule.load_adjustment_factor = factorAjuste;
+      profile.schedule.last_completed_workout = new Date().toISOString();
+      await this.firestoreService.saveUserProfile(profile);
+    }
+
     const result = { rpeScore, factorAjuste, recomendacion };
     this.logger.logToolResult('adjust_conditioning_multiplier', result);
     return result;
