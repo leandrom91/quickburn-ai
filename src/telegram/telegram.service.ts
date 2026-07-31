@@ -203,23 +203,27 @@ export class TelegramService implements OnModuleInit {
   }
 
   /**
-   * Extracción inteligente de biometría mediante Vertex AI LLM
+   * Extracción inteligente de biometría y ocupación mediante Vertex AI LLM
    */
-  private async parseBiometricsWithLlm(userInput: string, existing: { age: number; weight_kg: number; height_cm: number }) {
+  private async parseBiometricsWithLlm(
+    userInput: string,
+    existing: { age: number; weight_kg: number; height_cm: number; occupation?: string },
+  ) {
     const prompt = `
-Analiza el mensaje en lenguaje natural del atleta y extrae la edad (en años), peso (en kg) y altura (en cm).
+Analiza el mensaje en lenguaje natural del atleta y extrae la edad (en años), peso (en kg), altura (en cm) y ocupación/profesión (si la menciona).
 
 MENSAJE DEL ATLETA: "${userInput}"
-VALORES ACTUALES REGISTRADOS: Edad=${existing.age}, Peso=${existing.weight_kg}kg, Altura=${existing.height_cm}cm
+VALORES ACTUALES REGISTRADOS: Edad=${existing.age}, Peso=${existing.weight_kg}kg, Altura=${existing.height_cm}cm, Ocupación=${existing.occupation || 'Desk Job / General'}
 
 REGLAS DE EXTRACCIÓN:
 1. Si el atleta dice un número como "175", "1.75", "metro 75", "175cm", interpreta que es su altura en cm (175).
 2. Si el atleta dice "pesaba 98", "98 kilos", "98kg", "pesando 98", interpreta que es su peso en kg (98).
 3. Si el atleta dice "tengo 34", "34 años", "34 yo", interpreta que es su edad en años (34).
-4. Mantén el valor registrado previamente si no se menciona un dato nuevo en el mensaje actual.
+4. Si menciona su ocupación, trabajo o profesión (ej: "ingeniero", "oficinista", "estudiante", "abogado", "programador"), extráela en formato legible.
+5. Mantén el valor registrado previamente si no se menciona un dato nuevo en el mensaje actual.
 
 Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
-{"age": number, "weight_kg": number, "height_cm": number}
+{"age": number, "weight_kg": number, "height_cm": number, "occupation": string | null}
 `;
 
     try {
@@ -234,6 +238,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
           age: Number(parsed.age) || existing.age || 0,
           weight_kg: Number(parsed.weight_kg) || existing.weight_kg || 0,
           height_cm: h,
+          occupation: parsed.occupation && String(parsed.occupation).trim().length > 0 ? String(parsed.occupation).trim() : existing.occupation,
         };
       }
     } catch (err) {
@@ -256,7 +261,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
       height = hVal < 3 ? Math.round(hVal * 100) : Math.round(hVal);
     }
 
-    return { age, weight_kg: weight, height_cm: height };
+    return { age, weight_kg: weight, height_cm: height, occupation: existing.occupation };
   }
 
   /**
@@ -266,7 +271,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
     const firstName = ctx.from.first_name || 'Athlete';
     const step = profile?.onboarding_step || 'FITNESS_LEVEL';
 
-    // Manejar ingreso incremental de Biometría (Edad, Peso, Altura) con LLM
+    // Manejar ingreso incremental de Biometría (Edad, Peso, Altura y Ocupación) con LLM
     if (step === 'BIOMETRICS' && profile && userInput) {
       await ctx.sendChatAction('typing');
 
@@ -274,6 +279,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
         age: profile.profile.age || 0,
         weight_kg: profile.profile.weight_kg || 0,
         height_cm: profile.profile.height_cm || 0,
+        occupation: profile.occupation || 'Desk Job / General',
       };
 
       const extracted = await this.parseBiometricsWithLlm(userInput, existingBio);
@@ -281,10 +287,13 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
       profile.profile.age = extracted.age;
       profile.profile.weight_kg = extracted.weight_kg;
       profile.profile.height_cm = extracted.height_cm;
+      if (extracted.occupation) {
+        profile.occupation = extracted.occupation;
+      }
 
       await this.firestoreService.saveUserProfile(profile);
 
-      // Si falta alguno de los 3 datos, solicitar amablemente el dato faltante
+      // Si falta alguno de los 3 datos principales, solicitar amablemente el dato faltante
       const missing: string[] = [];
       if (!extracted.age) missing.push('edad (años)');
       if (!extracted.weight_kg) missing.push('peso (kg)');
@@ -295,13 +304,15 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
           extracted.age ? `${extracted.age} años` : null,
           extracted.weight_kg ? `${extracted.weight_kg} kg` : null,
           extracted.height_cm ? `${extracted.height_cm} cm` : null,
+          extracted.occupation ? `Trabajo: ${extracted.occupation}` : null,
         ].filter(Boolean).join(' | ');
 
         await this.sendSafeMarkdownReply(
           ctx,
           `👍 *Registrado hasta ahora:* ${savedText || 'En proceso...'}\n\n` +
           `¡Ya casi lo tenemos, *${firstName}*! Para calcular tu Frecuencia Cardíaca Máxima e IMC exacto, solo me falta saber tu *${missing.join(' y ')}*.\n\n` +
-          `¿Podrías indicármelo en un mensaje? (ej: *"mido 175 cm"* o *"98 kg"* o *"175"*)`
+          `¿Podrías indicármelo en un mensaje? (ej: *"mido 175 cm"* o *"98 kg"* o *"175"*)\n` +
+          `_(Opcionalmente puedes decirme tu trabajo u ocupación, ej: "soy ingeniero")_`
         );
         return;
       }
@@ -320,6 +331,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
       await this.sendSafeMarkdownReply(
         ctx,
         `✅ *Biometría completa registrada:* ${extracted.age} años | ${extracted.weight_kg} kg | ${extracted.height_cm} cm\n` +
+        `💼 *Ocupación:* ${profile.occupation || 'Desk Job / General'}\n` +
         `📊 *IMC:* ${bmi} | *Frecuencia Cardíaca Máx:* ${maxHr} bpm\n\n`
       );
 
@@ -391,7 +403,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
     const text =
       `📋 *Pregunta 3 de 4: Datos Biométricos & Fisiológicos*\n\n` +
       `Para calcular tu Frecuencia Cardíaca Máxima y gasto calórico exacto (METs), ¿podrías indicarme tu *edad*, *peso (kg)* y *altura (cm)*?\n\n` +
-      `*Por ejemplo:* _"28 años, 75kg, 178cm"_`;
+      `*Por ejemplo:* _"28 años, 75kg, 178cm, soy Ingeniero de Software"_`;
 
     await this.sendSafeMarkdownReply(ctx, text);
   }
@@ -410,6 +422,7 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta (sin texto adicional):
     const text =
       `🎉 *¡PERFIL DE ATLETA CONFIGURADO CON ÉXITO!* 🎉\n\n` +
       `• *Atleta:* ${profile?.name}\n` +
+      `• *Ocupación:* ${profile?.occupation || 'Desk Job / General'}\n` +
       `• *Nivel:* ${profile?.profile.fitness_level.toUpperCase()}\n` +
       `• *Frecuencia:* ${profile?.profile.max_weekly_frequency} Días/Semana\n` +
       `• *Biometría:* ${profile?.profile.age} años | ${profile?.profile.weight_kg} kg | ${profile?.profile.height_cm} cm (IMC: ${profile?.profile.bmi})\n` +
