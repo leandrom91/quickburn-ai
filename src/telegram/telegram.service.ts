@@ -26,7 +26,7 @@ export class TelegramService implements OnModuleInit {
 
     if (!token || token.trim() === '' || token === 'tu_telegram_bot_token_aqui') {
       this.logger.warn(
-        'TELEGRAM_BOT_TOKEN no provisto o con valor por defecto. Modo Polling inactivo hasta configurar token válido.',
+        'TELEGRAM_BOT_TOKEN no provisto o con valor por defecto. Modo inactivo hasta configurar token válido.',
       );
       return;
     }
@@ -34,10 +34,22 @@ export class TelegramService implements OnModuleInit {
     try {
       this.bot = new Telegraf(token);
       this.setupHandlers();
-      this.bot.launch();
-      this.logger.log('Bot de Telegram iniciado en modo Polling.');
+
+      const isWebhook = this.configService.get<string>('TELEGRAM_MODE') === 'webhook';
+      if (!isWebhook) {
+        this.bot.launch();
+        this.logger.log('Bot de Telegram iniciado en modo Polling (Desarrollo Local).');
+      } else {
+        this.logger.log('Bot de Telegram listo en modo Webhook Serverless (Cloud Run).');
+      }
     } catch (error) {
       this.logger.error(`Error al arrancar el Bot de Telegram: ${error.message}`);
+    }
+  }
+
+  async handleWebhookUpdate(update: any) {
+    if (this.bot) {
+      await this.bot.handleUpdate(update);
     }
   }
 
