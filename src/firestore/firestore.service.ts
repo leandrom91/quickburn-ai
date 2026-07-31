@@ -49,11 +49,11 @@ export class FirestoreService implements OnModuleInit {
 
     try {
       if (keyFilename && fs.existsSync(keyFilename)) {
-        this.firestore = new Firestore({ projectId, keyFilename });
+        this.firestore = new Firestore({ projectId, keyFilename, ignoreUndefinedProperties: true });
         this.logger.log(`Conectado a Firestore GCP con Service Account JSON (${keyFilename}) (Project: ${projectId})`);
         return true;
       } else {
-        this.firestore = new Firestore({ projectId });
+        this.firestore = new Firestore({ projectId, ignoreUndefinedProperties: true });
         this.logger.log(`Conectado a Firestore GCP vía ADC nativo Cloud Run (Project: ${projectId})`);
         return true;
       }
@@ -100,7 +100,7 @@ export class FirestoreService implements OnModuleInit {
               preferred_days: data.schedule?.preferred_days || ['Monday', 'Wednesday', 'Friday'],
               next_workout: data.schedule?.next_workout || new Date().toISOString(),
               weekly_streak: data.schedule?.weekly_streak || 0,
-              last_completed_workout: data.schedule?.last_completed_workout,
+              last_completed_workout: data.schedule?.last_completed_workout || null,
               load_adjustment_factor: data.schedule?.load_adjustment_factor || 1.0,
             },
             created_at: data.created_at || new Date().toISOString(),
@@ -120,7 +120,8 @@ export class FirestoreService implements OnModuleInit {
 
     if (this.firestore) {
       try {
-        await this.firestore.collection('users').doc(profile.user_id).set(profile, { merge: true });
+        const cleanProfile = JSON.parse(JSON.stringify(profile));
+        await this.firestore.collection('users').doc(profile.user_id).set(cleanProfile, { merge: true });
         this.logger.log(`Perfil de usuario ${profile.user_id} guardado exitosamente en Firestore.`);
       } catch (err) {
         this.logger.warn(`Error guardando perfil en Firestore (UserId: ${profile.user_id}): ${err.message}`);
@@ -157,12 +158,13 @@ export class FirestoreService implements OnModuleInit {
 
     if (this.firestore) {
       try {
+        const cleanMessages = JSON.parse(JSON.stringify(messages));
         await this.firestore
           .collection('users')
           .doc(userId)
           .collection('sessions')
           .doc('active')
-          .set({ messages, updated_at: new Date().toISOString() });
+          .set({ messages: cleanMessages, updated_at: new Date().toISOString() });
       } catch (err) {
         this.logger.warn(`Error al guardar sesión en Firestore (${userId}): ${err.message}`);
       }
@@ -193,6 +195,7 @@ export class FirestoreService implements OnModuleInit {
 
     if (this.firestore) {
       try {
+        const cleanRoutine = JSON.parse(JSON.stringify(routineData));
         await this.firestore
           .collection('users')
           .doc(userId)
@@ -202,7 +205,7 @@ export class FirestoreService implements OnModuleInit {
             routine_id: routineId,
             user_id: userId,
             created_at: new Date().toISOString(),
-            ...routineData,
+            ...cleanRoutine,
           });
         this.logger.log(`Rutina ${routineId} guardada para usuario ${userId} en Firestore.`);
       } catch (err) {
@@ -245,6 +248,7 @@ export class FirestoreService implements OnModuleInit {
 
     if (this.firestore) {
       try {
+        const cleanSession = JSON.parse(JSON.stringify(sessionData));
         await this.firestore
           .collection('users')
           .doc(userId)
@@ -254,7 +258,7 @@ export class FirestoreService implements OnModuleInit {
             session_log_id: sessionId,
             user_id: userId,
             timestamp: new Date().toISOString(),
-            ...sessionData,
+            ...cleanSession,
           });
         this.logger.log(`Sesión de entrenamiento ${sessionId} registrada en Firestore para ${userId}.`);
       } catch (err) {
