@@ -44,7 +44,7 @@ export class FirestoreService implements OnModuleInit {
   private initFirestore(): boolean {
     if (this.firestore) return true;
 
-    const projectId = this.configService.get<string>('firestore.projectId') || 'quickburnai';
+    const projectId = this.configService.get<string>('firestore.projectId') || process.env.GCP_PROJECT_ID || 'quickburnai';
     const keyFilename = this.configService.get<string>('firestore.keyFilename');
 
     try {
@@ -58,7 +58,7 @@ export class FirestoreService implements OnModuleInit {
         return true;
       }
     } catch (error) {
-      this.logger.warn(`Error inicializando cliente Firestore: ${error.message}`);
+      this.logger.error(`🚨 Error inicializando cliente Firestore (Project: ${projectId}): ${error.message}`, error.stack);
     }
 
     this.logger.warn('Usando almacén en memoria para desarrollo local.');
