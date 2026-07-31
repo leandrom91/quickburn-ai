@@ -33,7 +33,8 @@ export class RpeTools {
     const profile = await this.firestoreService.getUserProfile(userId);
     if (profile) {
       profile.schedule.load_adjustment_factor = factorAjuste;
-      profile.schedule.last_completed_workout = new Date().toISOString();
+      profile.schedule.last_completed_workout = this.firestoreService.formatHumanTimestamp();
+      profile.schedule.weekly_streak = (profile.schedule.weekly_streak || 0) + 1;
       await this.firestoreService.saveUserProfile(profile);
     }
 

@@ -21,7 +21,7 @@ export interface UserProfile {
   };
   schedule: {
     preferred_days: string[];
-    next_workout: string; // ISO string
+    next_workout: string; // Legible string YYYY-MM-DD_HH:mm:ss
     weekly_streak: number;
     last_completed_workout?: string;
     load_adjustment_factor?: number;
@@ -39,6 +39,17 @@ export class FirestoreService implements OnModuleInit {
 
   onModuleInit() {
     this.initFirestore();
+  }
+
+  public formatHumanTimestamp(date = new Date()): string {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const mm = pad(date.getMonth() + 1);
+    const dd = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const min = pad(date.getMinutes());
+    const ss = pad(date.getSeconds());
+    return `${yyyy}-${mm}-${dd}_${hh}:${min}:${ss}`;
   }
 
   private initFirestore(): boolean {
@@ -98,12 +109,12 @@ export class FirestoreService implements OnModuleInit {
             },
             schedule: {
               preferred_days: data.schedule?.preferred_days || ['Monday', 'Wednesday', 'Friday'],
-              next_workout: data.schedule?.next_workout || new Date().toISOString(),
+              next_workout: data.schedule?.next_workout || this.formatHumanTimestamp(),
               weekly_streak: data.schedule?.weekly_streak || 0,
               last_completed_workout: data.schedule?.last_completed_workout || null,
               load_adjustment_factor: data.schedule?.load_adjustment_factor || 1.0,
             },
-            created_at: data.created_at || new Date().toISOString(),
+            created_at: data.created_at || this.formatHumanTimestamp(),
           };
         }
       } catch (err) {
@@ -117,6 +128,10 @@ export class FirestoreService implements OnModuleInit {
   async saveUserProfile(profile: UserProfile): Promise<void> {
     this.initFirestore();
     this.memoryStore.set(`user_${profile.user_id}`, profile);
+
+    if (!profile.created_at) {
+      profile.created_at = this.formatHumanTimestamp();
+    }
 
     if (this.firestore) {
       try {
@@ -164,7 +179,7 @@ export class FirestoreService implements OnModuleInit {
           .doc(userId)
           .collection('sessions')
           .doc('active')
-          .set({ messages: cleanMessages, updated_at: new Date().toISOString() });
+          .set({ messages: cleanMessages, updated_at: this.formatHumanTimestamp() });
       } catch (err) {
         this.logger.warn(`Error al guardar sesión en Firestore (${userId}): ${err.message}`);
       }
@@ -191,7 +206,7 @@ export class FirestoreService implements OnModuleInit {
 
   async saveRoutine(userId: string, routineData: any): Promise<string> {
     this.initFirestore();
-    const routineId = `routine_${Date.now()}`;
+    const routineId = `routine_${this.formatHumanTimestamp()}`;
 
     if (this.firestore) {
       try {
@@ -204,7 +219,7 @@ export class FirestoreService implements OnModuleInit {
           .set({
             routine_id: routineId,
             user_id: userId,
-            created_at: new Date().toISOString(),
+            created_at: this.formatHumanTimestamp(),
             ...cleanRoutine,
           });
         this.logger.log(`Rutina ${routineId} guardada para usuario ${userId} en Firestore.`);
@@ -244,7 +259,8 @@ export class FirestoreService implements OnModuleInit {
 
   async logWorkoutSession(userId: string, sessionData: any): Promise<string> {
     this.initFirestore();
-    const sessionId = `session_log_${Date.now()}`;
+    const timestampStr = this.formatHumanTimestamp();
+    const sessionId = `session_${timestampStr}`;
 
     if (this.firestore) {
       try {
@@ -257,7 +273,7 @@ export class FirestoreService implements OnModuleInit {
           .set({
             session_log_id: sessionId,
             user_id: userId,
-            timestamp: new Date().toISOString(),
+            timestamp: timestampStr,
             ...cleanSession,
           });
         this.logger.log(`Sesión de entrenamiento ${sessionId} registrada en Firestore para ${userId}.`);
@@ -267,7 +283,7 @@ export class FirestoreService implements OnModuleInit {
     }
 
     const currentHistory = this.memoryStore.get(`history_${userId}`) || [];
-    currentHistory.unshift({ session_log_id: sessionId, user_id: userId, timestamp: new Date().toISOString(), ...sessionData });
+    currentHistory.unshift({ session_log_id: sessionId, user_id: userId, timestamp: timestampStr, ...sessionData });
     this.memoryStore.set(`history_${userId}`, currentHistory);
 
     return sessionId;
