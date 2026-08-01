@@ -1,12 +1,14 @@
 # 🔥 QuickBurn AI - Coach Deportivo Inteligente de HIIT
 
+[![Telegram Bot](https://img.shields.io/badge/Telegram-@QuickBurn__HIIT__Bot-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/QuickBurn_HIIT_Bot)
 [![NestJS](https://img.shields.io/badge/Framework-NestJS%20v10-red.svg)](https://nestjs.com/)
 [![Google Cloud](https://img.shields.io/badge/GCP-Vertex%20AI%20%7C%20Firestore-blue.svg)](https://cloud.google.com/)
 [![Gemini](https://img.shields.io/badge/LLM-Gemini%202.5%20Flash-orange.svg)](https://deepmind.google/technologies/gemini/)
-[![Telegram](https://img.shields.io/badge/UI-Telegram%20Bot-2CA5E0.svg)](https://telegram.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**QuickBurn AI** es una plataforma agéntica conversacional y proactiva de entrenamiento deportivo especializado en **HIIT (High-Intensity Interval Training)**. Desarrollada con arquitectura **Multiagente (Supervisor Pattern)** en **NestJS**, impulsada por **Google Cloud Vertex AI (Gemini 2.5 Flash)** y desplegada en infraestructura **Serverless en GCP (Cloud Run, Cloud Firestore, Cloud Build & Cloud Scheduler)**.
+**QuickBurn AI** es una plataforma agéntica conversacional y proactiva de entrenamiento deportivo especializado en **HIIT (High-Intensity Interval Training)**. Puedes interactuar directamente con el bot en Telegram a través de [**@QuickBurn_HIIT_Bot**](https://t.me/QuickBurn_HIIT_Bot).
+
+Desarrollada con arquitectura **Multiagente (Supervisor Pattern)** en **NestJS**, impulsada por **Google Cloud Vertex AI (Gemini 2.5 Flash)** y desplegada en infraestructura **Serverless en GCP (Cloud Run, Cloud Firestore, Cloud Build & Cloud Scheduler)**.
 
 ---
 
@@ -78,7 +80,7 @@ El proyecto está containerizado y preparado para producción con arquitectura *
 ### 1. Requisitos Previos
 - Node.js v20+
 - GCP Service Account JSON (`gcp-key.json`) con permisos en Vertex AI y Firestore.
-- Bot de Telegram (vía BotFather).
+- Bot de Telegram: [**@QuickBurn_HIIT_Bot**](https://t.me/QuickBurn_HIIT_Bot)
 
 ### 2. Clonar y Configurar
 ```bash
