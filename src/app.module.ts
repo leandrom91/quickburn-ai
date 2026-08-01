@@ -5,6 +5,7 @@ import { FirestoreModule } from './firestore/firestore.module';
 import { VertexModule } from './vertex/vertex.module';
 import { AgentsModule } from './agents/agents.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -17,5 +18,6 @@ import { TelegramModule } from './telegram/telegram.module';
     AgentsModule,
     TelegramModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
