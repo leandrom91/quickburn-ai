@@ -28,6 +28,15 @@ import { AgentLoggerService } from '../telemetry/agent-logger.service';
     RpeTools,
     CoachTools,
   ],
-  exports: [OrchestratorAgent, AdkSessionService, AgentLoggerService, LlmGeneratorService],
+  exports: [
+    OrchestratorAgent,
+    CoachFollowupAgent,
+    WorkoutPlannerAgent,
+    ScheduleAgent,
+    RpeAnalyticsAgent,
+    AdkSessionService,
+    AgentLoggerService,
+    LlmGeneratorService,
+  ],
 })
 export class AgentsModule {}
