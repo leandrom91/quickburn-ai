@@ -16,6 +16,27 @@ export class WorkoutPlannerAgent {
 
     const profile = await this.workoutTools.getUserProfile(userId);
 
+    // Validación de descanso obligatorio (Regla RN-01 de 36 horas)
+    if (profile?.schedule?.last_completed_workout) {
+      const dateStr = String(profile.schedule.last_completed_workout).replace('_', 'T');
+      const lastCompleted = new Date(dateStr).getTime();
+
+      if (!isNaN(lastCompleted)) {
+        const now = new Date().getTime();
+        const hoursDiff = (now - lastCompleted) / (1000 * 60 * 60);
+
+        if (hoursDiff < 36) {
+          const hoursRemaining = Math.ceil(36 - hoursDiff);
+          return this.llmGenerator.generateNaturalResponse(
+            `Eres el WorkoutPlannerAgent de QuickBurn AI. El atleta ${profile.name} intentó solicitar una nueva rutina HIIT solo ${Math.round(hoursDiff)} horas después de su último entrenamiento. Por salud deportiva (Regla RN-01 de supercompensación) y para evitar lesiones, explícale de forma empática y cercana que debe descansar al menos 36 horas entre sesiones. Ofrécele reprogramar su próximo entrenamiento para dentro de unas ${hoursRemaining} horas.`,
+            { athlete: profile.name, horasTranscurridas: Math.round(hoursDiff), horasRestantes: hoursRemaining },
+            userInput,
+            `🛑 *PAUSA DE SEGURIDAD DEPORTIVA (REGLA 36H)*\n\n¡Me encanta tu entusiasmo, *${profile.name}*! 💪 Sin embargo, completaste tu última rutina hace solo ${Math.round(hoursDiff)} horas.\n\nPor salud deportiva y supercompensación muscular (mínimo 36h de descanso), es fundamental permitir que tu cuerpo se recupere para evitar sobreentrenamiento. Te recomiendo descansar hoy y tu próxima rutina estará lista en ${hoursRemaining} horas. 💧`
+          );
+        }
+      }
+    }
+
     const matchDuration = userInput.match(/(\d+)\s*(min|minutos)/i);
     const durationMin = matchDuration ? parseInt(matchDuration[1], 10) : 15;
 

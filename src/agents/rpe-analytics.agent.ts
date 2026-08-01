@@ -24,13 +24,17 @@ export class RpeAnalyticsAgent {
 
     const profile = await this.firestoreService.getUserProfile(userId);
     if (profile?.schedule?.last_completed_workout) {
-      const lastCompleted = new Date(profile.schedule.last_completed_workout).getTime();
-      const now = new Date().getTime();
-      const hoursDiff = (now - lastCompleted) / (1000 * 60 * 60);
+      const dateStr = String(profile.schedule.last_completed_workout).replace('_', 'T');
+      const lastCompleted = new Date(dateStr).getTime();
 
-      // Si ya registró RPE en las últimas 4 horas
-      if (hoursDiff < 4) {
-        return `💪 ¡Hola, ${profile.name}! Ya habías registrado exitosamente tu esfuerzo RPE para la rutina de hoy. Tu ajuste de carga (${Math.round((profile.schedule.load_adjustment_factor || 1.0) * 100)}%) ya está activo en tu perfil de Firestore. ¡Disfruta tu descanso e hidrátate bien! 💧`;
+      if (!isNaN(lastCompleted)) {
+        const now = new Date().getTime();
+        const hoursDiff = (now - lastCompleted) / (1000 * 60 * 60);
+
+        // Si ya registró RPE en las últimas 4 horas
+        if (hoursDiff < 4) {
+          return `💪 ¡Hola, ${profile.name}! Ya habías registrado exitosamente tu esfuerzo RPE para la rutina de hoy. Tu ajuste de carga (${Math.round((profile.schedule.load_adjustment_factor || 1.0) * 100)}%) ya está activo en tu perfil de Firestore. ¡Disfruta tu descanso e hidrátate bien! 💧`;
+        }
       }
     }
 
